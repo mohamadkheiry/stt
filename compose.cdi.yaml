@@ -1,0 +1,7 @@
+# Optional override for Docker hosts configured with NVIDIA CDI.
+# Run: docker compose -f compose.yaml -f compose.cdi.yaml up -d --build
+services:
+  whisper-engine:
+    deploy: null
+    devices:
+      - nvidia.com/gpu=all

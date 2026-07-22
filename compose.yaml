@@ -1,0 +1,75 @@
+name: whisper-stt
+
+services:
+  whisper-engine:
+    build:
+      context: .
+      dockerfile: services/engine/Dockerfile
+    image: whisper-stt-engine:local
+    restart: always
+    init: true
+    env_file: .env
+    environment:
+      PORT: "8091"
+    volumes:
+      - whisper-models:/models
+    expose:
+      - "8091"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: [CMD, curl, -fsS, http://127.0.0.1:8091/health]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      # The first boot downloads a multi-gigabyte model into the named volume.
+      start_period: 900s
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "3"
+    networks:
+      - backend
+
+  stt-api:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    image: whisper-stt-api:local
+    restart: always
+    init: true
+    env_file: .env
+    environment:
+      PORT: "8101"
+      ENGINE_URL: http://whisper-engine:8091
+    depends_on:
+      whisper-engine:
+        condition: service_healthy
+    ports:
+      - "${STT_PORT:-8101}:8101"
+    healthcheck:
+      test: [CMD, curl, -fsS, http://127.0.0.1:8101/health]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "3"
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge
+
+volumes:
+  whisper-models:
