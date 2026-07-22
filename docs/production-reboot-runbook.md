@@ -13,6 +13,23 @@ The production stack has two independently supervised containers:
 
 The optimized existing deployment can use different container names—currently `ai-whisper-asr-engine` and `ai-persian-asr-studio`—while preserving the same health and transcription contract.
 
+### Existing optimized-host mapping
+
+The current optimized host uses this equivalent mapping:
+
+| Concern | Current host value |
+|---|---|
+| Compose file | `/opt/ai-platform/deploy/compose.yaml` |
+| Boot unit | `ai-platform-compose.service` |
+| Engine container | `ai-whisper-asr-engine` |
+| API/Swagger container | `ai-persian-asr-studio` |
+| Private engine endpoint | `127.0.0.1:8091` |
+| LAN API/Swagger port | `8101` |
+| GPU device discovery | `nvidia-cdi-refresh.path` |
+| Superseded native unit | `persian-asr.service` (disabled and inactive) |
+
+Keep host addresses and credentials in the private operations inventory rather than this public repository.
+
 ## Boot dependency chain
 
 ```mermaid
