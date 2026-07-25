@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import os
+import time
+import uuid
 from pathlib import Path
 from tempfile import SpooledTemporaryFile
-from typing import BinaryIO
+from typing import Any, BinaryIO, Literal
 
 import httpx
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 
 ROOT = Path(__file__).resolve().parent
@@ -16,10 +21,17 @@ ENGINE_URL = os.getenv("ENGINE_URL", "http://whisper-engine:8091").rstrip("/")
 ENGINE_API_KEY = os.getenv("ENGINE_API_KEY", "")
 MAX_AUDIO_BYTES = int(os.getenv("MAX_AUDIO_BYTES", str(200 * 1024 * 1024)))
 TRANSCRIPTION_TAG = "تبدیل صوت به متن"
+OPENAI_MODEL = "whisper-1"
+LOCAL_MODEL = "whisper-large-v3-turbo-q5-cuda"
+MODEL_ALIASES = {OPENAI_MODEL, LOCAL_MODEL, "whisper-large-v3-turbo"}
+
+
+class TranscriptionResponse(BaseModel):
+    text: str
 
 app = FastAPI(
     title="Whisper Large Persian Speech-to-Text API",
-    version="1.0.0",
+    version="1.1.0",
     description=(
         "سرویس تبدیل فایل صوتی به متن با Whisper Large و شتاب‌دهی GPU. "
         "در Swagger روی **Try it out** بزنید، فایل را انتخاب کنید و پاسخ را دریافت کنید."
@@ -41,6 +53,56 @@ app = FastAPI(
     },
 )
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
+
+
+def openai_error(message: str, error_type: str, param: str | None, code: str | None) -> dict[str, Any]:
+    return {"error": {"message": message, "type": error_type, "param": param, "code": code}}
+
+
+@app.middleware("http")
+async def openai_response_headers(request: Request, call_next):
+    started = time.perf_counter()
+    response = await call_next(request)
+    if request.url.path.startswith("/v1/"):
+        response.headers["x-request-id"] = f"req_{uuid.uuid4().hex}"
+        response.headers["openai-processing-ms"] = str(round((time.perf_counter() - started) * 1000))
+    return response
+
+
+@app.exception_handler(HTTPException)
+async def openai_http_error(request: Request, exc: HTTPException):
+    if not request.url.path.startswith("/v1/"):
+        return await http_exception_handler(request, exc)
+    detail = exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}
+    error_type = "invalid_request_error" if 400 <= exc.status_code < 500 else "server_error"
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=openai_error(
+            str(detail.get("message", "Request failed")),
+            str(detail.get("type", error_type)),
+            detail.get("param"),
+            detail.get("code"),
+        ),
+        headers=exc.headers,
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def openai_validation_error(request: Request, exc: RequestValidationError):
+    if not request.url.path.startswith("/v1/"):
+        return await request_validation_exception_handler(request, exc)
+    first = exc.errors()[0] if exc.errors() else {}
+    location = first.get("loc", [])
+    param = str(location[-1]) if location else None
+    return JSONResponse(
+        status_code=400,
+        content=openai_error(
+            str(first.get("msg", "Invalid request")),
+            "invalid_request_error",
+            param,
+            "missing_required_parameter" if first.get("type") == "missing" else "invalid_value",
+        ),
+    )
 
 
 def engine_headers() -> dict[str, str]:
@@ -85,6 +147,7 @@ async def forward_transcription(
             )
         }
         data = {
+            "model": OPENAI_MODEL,
             "language": language or "fa",
             "response_format": response_format,
             "temperature": str(temperature),
@@ -115,6 +178,11 @@ async def forward_transcription(
 @app.get("/", include_in_schema=False)
 def index() -> FileResponse:
     return FileResponse(ROOT / "static" / "index.html")
+
+
+@app.get("/doc", include_in_schema=False)
+def doc_redirect() -> Response:
+    return Response(status_code=307, headers={"Location": "/redoc"})
 
 
 @app.get(
@@ -153,16 +221,11 @@ TRANSCRIPTION_RESPONSES = {
 @app.post(
     "/api/transcribe",
     tags=[TRANSCRIPTION_TAG],
-    summary="تبدیل فایل صوتی به متن",
+    summary="تبدیل فایل صوتی به متن (سازگار با نسخه قبلی)",
     responses=TRANSCRIPTION_RESPONSES,
+    deprecated=True,
 )
-@app.post(
-    "/v1/audio/transcriptions",
-    tags=[TRANSCRIPTION_TAG],
-    summary="OpenAI-compatible transcription",
-    responses=TRANSCRIPTION_RESPONSES,
-)
-async def transcribe(
+async def legacy_transcribe(
     file: UploadFile = File(..., description="فایل WAV، MP3، M4A، OGG، WebM یا فرمت صوتی رایج"),
     language: str = Form("fa", description="کد زبان؛ برای فارسی fa"),
     response_format: str = Form("json", description="json، text، verbose_json، srt یا vtt"),
@@ -170,3 +233,66 @@ async def transcribe(
     temperature: float = Form(0.0, description="برای خروجی پایدار مقدار صفر پیشنهاد می‌شود"),
 ) -> Response:
     return await forward_transcription(file, language, response_format, prompt, temperature)
+
+
+@app.get("/v1/models", tags=["OpenAI compatibility"], summary="List models")
+def openai_models() -> dict[str, Any]:
+    return {
+        "object": "list",
+        "data": [{"id": OPENAI_MODEL, "object": "model", "created": 0, "owned_by": "local"}],
+    }
+
+
+@app.get("/v1/models/{model}", tags=["OpenAI compatibility"], summary="Retrieve model")
+def openai_model(model: str) -> dict[str, Any]:
+    if model not in MODEL_ALIASES:
+        raise HTTPException(
+            404,
+            {"message": f"The model '{model}' does not exist.", "param": "model", "code": "model_not_found"},
+        )
+    return {"id": OPENAI_MODEL, "object": "model", "created": 0, "owned_by": "local"}
+
+
+@app.post(
+    "/v1/audio/transcriptions",
+    response_model=TranscriptionResponse,
+    tags=["OpenAI compatibility"],
+    summary="Create transcription",
+    description="OpenAI-compatible multipart transcription endpoint. Use model=whisper-1.",
+    responses=TRANSCRIPTION_RESPONSES,
+)
+async def openai_transcribe(
+    file: UploadFile = File(..., description="FLAC, MP3, MP4, MPEG, MPGA, M4A, OGG, WAV or WebM audio"),
+    model: str = Form(..., description="Model ID; use whisper-1"),
+    language: str | None = Form(None, description="Optional ISO-639-1 language code"),
+    prompt: str | None = Form(None, description="Optional vocabulary or style guide"),
+    response_format: Literal["json", "text", "srt", "verbose_json", "vtt"] = Form("json"),
+    temperature: float = Form(0.0, ge=0.0, le=1.0),
+    timestamp_granularities: list[Literal["word", "segment"]] | None = Form(
+        None,
+        alias="timestamp_granularities[]",
+    ),
+    stream: bool = Form(False, description="Ignored for whisper-1"),
+) -> Response:
+    if model not in MODEL_ALIASES:
+        raise HTTPException(
+            404,
+            {"message": f"The model '{model}' does not exist.", "param": "model", "code": "model_not_found"},
+        )
+    if timestamp_granularities and response_format != "verbose_json":
+        raise HTTPException(
+            400,
+            {
+                "message": "timestamp_granularities[] requires response_format=verbose_json.",
+                "param": "timestamp_granularities[]",
+                "code": "invalid_value",
+            },
+        )
+    _ = stream
+    return await forward_transcription(
+        file,
+        language or "fa",
+        response_format,
+        prompt or "",
+        temperature,
+    )

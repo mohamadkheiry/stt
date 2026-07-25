@@ -2,7 +2,7 @@
 
 Production-oriented speech-to-text service with a Persian upload UI, Swagger/OpenAPI, an OpenAI-compatible transcription endpoint, and a GPU-backed Whisper Large engine.
 
-[راهنمای فارسی](README.fa.md) · [Architecture](docs/architecture.md) · [API](docs/api.md) · [Deployment](docs/deployment.md) · [Operations](docs/operations.md) · [Development](docs/development.md)
+[راهنمای فارسی](README.fa.md) · [Architecture](docs/architecture.md) · [API](docs/api.md) · [OpenAI compatibility](docs/openai-compatibility.md) · [Deployment](docs/deployment.md) · [Operations](docs/operations.md) · [Development](docs/development.md)
 
 ## Features
 
@@ -42,6 +42,7 @@ Example:
 
 ```bash
 curl -F "file=@sample.wav" \
+  -F "model=whisper-1" \
   -F "language=fa" \
   -F "response_format=json" \
   http://localhost:8101/v1/audio/transcriptions

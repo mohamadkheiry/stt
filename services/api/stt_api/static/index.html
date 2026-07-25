@@ -23,6 +23,7 @@
   <p>فایل صوتی فارسی را وارد کنید و متن استخراج‌شده را مستقیماً دریافت کنید.</p>
   <section class="card">
     <form id="form">
+      <input name="model" type="hidden" value="whisper-1">
       <label class="drop" id="drop">
         <input id="file" name="file" type="file" accept="audio/*,video/mp4" required>
         <strong>فایل را اینجا رها کنید یا برای انتخاب کلیک کنید</strong>
@@ -46,7 +47,7 @@
   ['dragenter','dragover'].forEach(e=>drop.addEventListener(e,x=>{x.preventDefault();drop.classList.add('active')}));
   ['dragleave','drop'].forEach(e=>drop.addEventListener(e,x=>{x.preventDefault();drop.classList.remove('active')}));
   drop.addEventListener('drop',e=>{file.files=e.dataTransfer.files;file.dispatchEvent(new Event('change'))});
-  form.addEventListener('submit',async e=>{e.preventDefault();result.style.display='none';status.className='status';status.textContent='در حال پردازش فایل روی کارت گرافیک…';submit.disabled=true;try{const body=new FormData(form);body.set('temperature','0');const response=await fetch('/api/transcribe',{method:'POST',body});const text=await response.text();if(!response.ok)throw new Error(text);try{result.textContent=JSON.stringify(JSON.parse(text),null,2)}catch{result.textContent=text}result.style.display='block';status.textContent='تبدیل با موفقیت انجام شد.'}catch(error){status.className='status error';status.textContent=`خطا: ${error.message}`}finally{submit.disabled=false}});
+  form.addEventListener('submit',async e=>{e.preventDefault();result.style.display='none';status.className='status';status.textContent='در حال پردازش فایل روی کارت گرافیک…';submit.disabled=true;try{const body=new FormData(form);body.set('temperature','0');const response=await fetch('/v1/audio/transcriptions',{method:'POST',body});const text=await response.text();if(!response.ok)throw new Error(text);try{result.textContent=JSON.stringify(JSON.parse(text),null,2)}catch{result.textContent=text}result.style.display='block';status.textContent='تبدیل با موفقیت انجام شد.'}catch(error){status.className='status error';status.textContent=`خطا: ${error.message}`}finally{submit.disabled=false}});
 </script>
 </body>
 </html>

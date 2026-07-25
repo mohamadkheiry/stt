@@ -32,12 +32,13 @@ docker compose -f compose.yaml -f compose.cdi.yaml up -d --build
 | سلامت سرویس | <http://localhost:8101/health> |
 | API | `POST http://localhost:8101/v1/audio/transcriptions` |
 
-در Swagger مسیر `POST /api/transcribe` را باز کنید، روی **Try it out** بزنید، فایل را انتخاب و **Execute** را فشار دهید.
+در Swagger مسیر استاندارد `POST /v1/audio/transcriptions` را باز کنید، مقدار `model` را روی `whisper-1` قرار دهید، فایل را انتخاب و **Execute** را فشار دهید.
 
 ## نمونه درخواست
 
 ```bash
 curl -F "file=@sample.wav" \
+  -F "model=whisper-1" \
   -F "language=fa" \
   -F "response_format=json" \
   http://localhost:8101/v1/audio/transcriptions
