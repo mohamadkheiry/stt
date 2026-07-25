@@ -10,6 +10,7 @@ Production-oriented speech-to-text service with a Persian upload UI, Swagger/Ope
 - File upload UI and interactive Swagger at `/docs`
 - OpenAI-compatible `POST /v1/audio/transcriptions`
 - JSON, text, verbose JSON, SRT, and VTT output
+- OpenAI-style duration `usage` plus exact Whisper decoder `token_usage` in JSON responses
 - Docker health checks, bounded GPU concurrency, persistent model cache, restart policy, and log rotation
 - Separate public API and private engine containers
 - No credentials or model weights committed to Git

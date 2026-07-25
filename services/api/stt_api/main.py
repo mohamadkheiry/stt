@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 import time
 import uuid
@@ -26,12 +27,24 @@ LOCAL_MODEL = "whisper-large-v3-turbo-q5-cuda"
 MODEL_ALIASES = {OPENAI_MODEL, LOCAL_MODEL, "whisper-large-v3-turbo"}
 
 
+class DurationUsage(BaseModel):
+    type: Literal["duration"] = "duration"
+    seconds: int
+
+
+class WhisperTokenUsage(BaseModel):
+    output_tokens: int
+    source: Literal["whisper_decoder_token_ids"] = "whisper_decoder_token_ids"
+
+
 class TranscriptionResponse(BaseModel):
     text: str
+    usage: DurationUsage
+    token_usage: WhisperTokenUsage
 
 app = FastAPI(
     title="Whisper Large Persian Speech-to-Text API",
-    version="1.1.0",
+    version="1.3.0",
     description=(
         "سرویس تبدیل فایل صوتی به متن با Whisper Large و شتاب‌دهی GPU. "
         "در Swagger روی **Try it out** بزنید، فایل را انتخاب کنید و پاسخ را دریافت کنید."
@@ -146,10 +159,11 @@ async def forward_transcription(
                 file.content_type or "application/octet-stream",
             )
         }
+        upstream_response_format = "verbose_json" if response_format in {"json", "verbose_json"} else response_format
         data = {
             "model": OPENAI_MODEL,
             "language": language or "fa",
-            "response_format": response_format,
+            "response_format": upstream_response_format,
             "temperature": str(temperature),
         }
         if prompt:
@@ -168,6 +182,45 @@ async def forward_transcription(
 
     if upstream.is_error:
         raise HTTPException(502, upstream.text[:2000])
+
+    if response_format in {"json", "verbose_json"}:
+        try:
+            payload = upstream.json()
+        except ValueError as exc:
+            raise HTTPException(502, "Whisper engine returned invalid JSON.") from exc
+
+        duration = max(0.0, float(payload.get("duration", 0.0) or 0.0))
+        if duration == 0.0:
+            duration = max(
+                (float(segment.get("end", 0.0) or 0.0) for segment in payload.get("segments", [])),
+                default=0.0,
+            )
+        output_tokens = sum(
+            len(segment.get("tokens", []))
+            for segment in payload.get("segments", [])
+            if isinstance(segment, dict) and isinstance(segment.get("tokens", []), list)
+        )
+        payload["usage"] = {"type": "duration", "seconds": math.ceil(duration)}
+        payload["token_usage"] = {
+            "output_tokens": output_tokens,
+            "source": "whisper_decoder_token_ids",
+        }
+        if response_format == "json":
+            payload = {
+                "text": str(payload.get("text", "")),
+                "usage": payload["usage"],
+                "token_usage": payload["token_usage"],
+            }
+        return JSONResponse(
+            payload,
+            headers={
+                "X-STT-Engine": "whisper-large",
+                "X-Usage-Audio-Seconds": str(math.ceil(duration)),
+                "X-Whisper-Output-Tokens": str(output_tokens),
+                "Cache-Control": "no-store",
+            },
+        )
+
     return Response(
         upstream.content,
         media_type=upstream.headers.get("content-type", "application/json"),
@@ -215,6 +268,22 @@ TRANSCRIPTION_RESPONSES = {
     400: {"description": "فایل یا پارامتر نامعتبر"},
     413: {"description": "حجم فایل بیشتر از محدودیت"},
     502: {"description": "خطا در موتور Whisper"},
+}
+
+TRANSCRIPTION_RESPONSES[200]["content"] = {
+    "application/json": {
+        "example": {
+            "text": "transcribed text",
+            "usage": {"type": "duration", "seconds": 2},
+            "token_usage": {
+                "output_tokens": 11,
+                "source": "whisper_decoder_token_ids",
+            },
+        }
+    },
+    "text/plain": {},
+    "application/x-subrip": {},
+    "text/vtt": {},
 }
 
 

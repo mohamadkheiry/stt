@@ -31,6 +31,14 @@ def test_openai_compatible_route_is_documented() -> None:
     assert {"file", "model"}.issubset(multipart_schema("/v1/audio/transcriptions")["required"])
     assert "get" in schema["paths"]["/v1/models"]
     assert schema["paths"]["/api/transcribe"]["post"]["deprecated"] is True
+    response_schema = schema["components"]["schemas"]["TranscriptionResponse"]
+    assert {"text", "usage", "token_usage"}.issubset(response_schema["required"])
+
+
+def test_usage_response_schema_matches_openai_whisper_duration_contract() -> None:
+    schema = app.openapi()["components"]["schemas"]
+    assert schema["DurationUsage"]["properties"]["type"]["const"] == "duration"
+    assert schema["WhisperTokenUsage"]["properties"]["source"]["const"] == "whisper_decoder_token_ids"
 
 
 def test_openai_validation_error_and_request_id() -> None:

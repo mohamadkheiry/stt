@@ -130,7 +130,13 @@ def transcribe_sync(
         word_timestamps=False,
     )
     segments = [
-        {"id": item.id, "start": item.start, "end": item.end, "text": item.text}
+        {
+            "id": item.id,
+            "start": item.start,
+            "end": item.end,
+            "text": item.text,
+            "tokens": list(getattr(item, "tokens", []) or []),
+        }
         for item in generated
     ]
     metadata = {

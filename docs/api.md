@@ -29,6 +29,28 @@ curl -F "file=@sample.wav" \
 {"text":"سلام، این یک فایل آزمایشی است."}
 ```
 
+### Usage fields
+
+JSON responses include OpenAI-compatible duration usage for `whisper-1` and
+the exact number of decoder token IDs emitted by the local Whisper engine:
+
+```json
+{
+  "text": "transcribed text",
+  "usage": {"type": "duration", "seconds": 2},
+  "token_usage": {
+    "output_tokens": 11,
+    "source": "whisper_decoder_token_ids"
+  }
+}
+```
+
+`usage.seconds` is rounded up to a whole second, matching the OpenAI duration
+usage contract for duration-billed transcription models.
+`token_usage.output_tokens` is counted from actual Whisper decoder token IDs;
+it is not estimated from text length. Whisper audio input is duration-based,
+so this API does not invent an input token count.
+
 ### Verbose JSON
 
 ```json

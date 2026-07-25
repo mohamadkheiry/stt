@@ -17,7 +17,9 @@ This file records the latest verified deployment address for operators and devel
 | Health | <http://192.168.20.189:8101/health> |
 | Transcription API | `POST http://192.168.20.189:8101/v1/audio/transcriptions` |
 | Simple dashboard API | `POST http://192.168.20.189:8101/api/transcribe` |
-| Last verified | `2026-07-22` |
+| API version | `1.3.0` |
+| Usage reporting | OpenAI duration `usage` + exact Whisper decoder `token_usage` |
+| Last verified | `2026-07-25` |
 
 The engine endpoint `127.0.0.1:8091` is internal to the server and must not be published to users.
 
@@ -27,6 +29,7 @@ The engine endpoint `127.0.0.1:8091` is internal to the server and must not be p
 - API/Swagger container: `ai-persian-asr-studio`
 - Both containers use `restart: always`.
 - Both containers were healthy at the last verification.
+- A real transcription verified `usage.seconds`, `token_usage.output_tokens`, and the matching usage headers.
 - Boot supervisor: `ai-platform-compose.service`
 - GPU discovery at boot: `nvidia-cdi-refresh.path`
 
@@ -44,4 +47,3 @@ When deploying to a new address:
 4. Confirm the engine and API containers are healthy and use `restart: always`.
 5. Confirm the Compose systemd unit is enabled and active.
 6. Commit this file together with the deployment change.
-

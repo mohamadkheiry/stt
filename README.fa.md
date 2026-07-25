@@ -6,6 +6,9 @@
 
 پیش‌نیازها: Docker، Docker Compose، کارت NVIDIA، درایور سازگار و NVIDIA Container Toolkit.
 
+خروجی‌های `json` و `verbose_json` شامل `usage` استاندارد بر اساس مدت صوت و
+`token_usage.output_tokens` بر اساس تعداد واقعی توکن‌های decoder ویسپر هستند.
+
 ```bash
 cp .env.example .env
 ```
