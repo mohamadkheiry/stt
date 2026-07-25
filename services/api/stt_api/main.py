@@ -41,10 +41,31 @@ class TranscriptionResponse(BaseModel):
     text: str
     usage: DurationUsage
     token_usage: WhisperTokenUsage
+    tokens_consumed: int
+    processing_status: Literal["completed"]
+    error_code: str | None
+    error_message: str | None
+    processing_time_ms: int
+
+
+class ErrorDetail(BaseModel):
+    message: str
+    type: str
+    param: str | None
+    code: str | None
+
+
+class ContractErrorResponse(BaseModel):
+    error: ErrorDetail
+    tokens_consumed: int
+    processing_status: Literal["failed"]
+    error_code: str
+    error_message: str
+    processing_time_ms: int
 
 app = FastAPI(
     title="Whisper Large Persian Speech-to-Text API",
-    version="1.3.0",
+    version="1.4.0",
     description=(
         "سرویس تبدیل فایل صوتی به متن با Whisper Large و شتاب‌دهی GPU. "
         "در Swagger روی **Try it out** بزنید، فایل را انتخاب کنید و پاسخ را دریافت کنید."
@@ -75,6 +96,7 @@ def openai_error(message: str, error_type: str, param: str | None, code: str | N
 @app.middleware("http")
 async def openai_response_headers(request: Request, call_next):
     started = time.perf_counter()
+    request.state.processing_started = started
     response = await call_next(request)
     if request.url.path.startswith("/v1/"):
         response.headers["x-request-id"] = f"req_{uuid.uuid4().hex}"
@@ -88,14 +110,21 @@ async def openai_http_error(request: Request, exc: HTTPException):
         return await http_exception_handler(request, exc)
     detail = exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}
     error_type = "invalid_request_error" if 400 <= exc.status_code < 500 else "server_error"
+    message = str(detail.get("message", "Request failed"))
+    code = str(detail.get("code") or ("invalid_request_error" if 400 <= exc.status_code < 500 else "server_error"))
     return JSONResponse(
         status_code=exc.status_code,
-        content=openai_error(
-            str(detail.get("message", "Request failed")),
-            str(detail.get("type", error_type)),
-            detail.get("param"),
-            detail.get("code"),
-        ),
+        content={
+            **openai_error(message, str(detail.get("type", error_type)), detail.get("param"), detail.get("code")),
+            "tokens_consumed": 0,
+            "processing_status": "failed",
+            "error_code": code,
+            "error_message": message,
+            "processing_time_ms": max(
+                0,
+                round((time.perf_counter() - getattr(request.state, "processing_started", time.perf_counter())) * 1000),
+            ),
+        },
         headers=exc.headers,
     )
 
@@ -107,14 +136,21 @@ async def openai_validation_error(request: Request, exc: RequestValidationError)
     first = exc.errors()[0] if exc.errors() else {}
     location = first.get("loc", [])
     param = str(location[-1]) if location else None
+    message = str(first.get("msg", "Invalid request"))
+    code = "missing_required_parameter" if first.get("type") == "missing" else "invalid_value"
     return JSONResponse(
         status_code=400,
-        content=openai_error(
-            str(first.get("msg", "Invalid request")),
-            "invalid_request_error",
-            param,
-            "missing_required_parameter" if first.get("type") == "missing" else "invalid_value",
-        ),
+        content={
+            **openai_error(message, "invalid_request_error", param, code),
+            "tokens_consumed": 0,
+            "processing_status": "failed",
+            "error_code": code,
+            "error_message": message,
+            "processing_time_ms": max(
+                0,
+                round((time.perf_counter() - getattr(request.state, "processing_started", time.perf_counter())) * 1000),
+            ),
+        },
     )
 
 
@@ -147,6 +183,7 @@ async def forward_transcription(
     prompt: str,
     temperature: float,
 ) -> Response:
+    processing_started = time.perf_counter()
     if response_format not in {"json", "verbose_json", "text", "srt", "vtt"}:
         raise HTTPException(400, "response_format must be json, verbose_json, text, srt or vtt")
 
@@ -205,11 +242,21 @@ async def forward_transcription(
             "output_tokens": output_tokens,
             "source": "whisper_decoder_token_ids",
         }
+        payload["tokens_consumed"] = output_tokens
+        payload["processing_status"] = "completed"
+        payload["error_code"] = None
+        payload["error_message"] = None
+        payload["processing_time_ms"] = max(0, round((time.perf_counter() - processing_started) * 1000))
         if response_format == "json":
             payload = {
                 "text": str(payload.get("text", "")),
                 "usage": payload["usage"],
                 "token_usage": payload["token_usage"],
+                "tokens_consumed": payload["tokens_consumed"],
+                "processing_status": payload["processing_status"],
+                "error_code": payload["error_code"],
+                "error_message": payload["error_message"],
+                "processing_time_ms": payload["processing_time_ms"],
             }
         return JSONResponse(
             payload,
@@ -217,6 +264,8 @@ async def forward_transcription(
                 "X-STT-Engine": "whisper-large",
                 "X-Usage-Audio-Seconds": str(math.ceil(duration)),
                 "X-Whisper-Output-Tokens": str(output_tokens),
+                "X-Processing-Status": "completed",
+                "X-Processing-Time-Ms": str(payload["processing_time_ms"]),
                 "Cache-Control": "no-store",
             },
         )
@@ -224,7 +273,12 @@ async def forward_transcription(
     return Response(
         upstream.content,
         media_type=upstream.headers.get("content-type", "application/json"),
-        headers={"X-STT-Engine": "whisper-large", "Cache-Control": "no-store"},
+        headers={
+            "X-STT-Engine": "whisper-large",
+            "X-Processing-Status": "completed",
+            "X-Processing-Time-Ms": str(max(0, round((time.perf_counter() - processing_started) * 1000))),
+            "Cache-Control": "no-store",
+        },
     )
 
 
@@ -279,11 +333,22 @@ TRANSCRIPTION_RESPONSES[200]["content"] = {
                 "output_tokens": 11,
                 "source": "whisper_decoder_token_ids",
             },
+            "tokens_consumed": 11,
+            "processing_status": "completed",
+            "error_code": None,
+            "error_message": None,
+            "processing_time_ms": 842,
         }
     },
     "text/plain": {},
     "application/x-subrip": {},
     "text/vtt": {},
+}
+for error_status in (400, 413, 502):
+    TRANSCRIPTION_RESPONSES[error_status]["model"] = ContractErrorResponse
+TRANSCRIPTION_RESPONSES[404] = {
+    "description": "Model not found",
+    "model": ContractErrorResponse,
 }
 
 

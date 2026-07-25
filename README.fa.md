@@ -8,6 +8,8 @@
 
 خروجی‌های `json` و `verbose_json` شامل `usage` استاندارد بر اساس مدت صوت و
 `token_usage.output_tokens` بر اساس تعداد واقعی توکن‌های decoder ویسپر هستند.
+فیلدهای Audit شامل `tokens_consumed`، `processing_status`، `error_code`،
+`error_message` و `processing_time_ms` نیز در پاسخ JSON ارائه می‌شوند.
 
 ```bash
 cp .env.example .env

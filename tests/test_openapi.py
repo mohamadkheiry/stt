@@ -32,7 +32,16 @@ def test_openai_compatible_route_is_documented() -> None:
     assert "get" in schema["paths"]["/v1/models"]
     assert schema["paths"]["/api/transcribe"]["post"]["deprecated"] is True
     response_schema = schema["components"]["schemas"]["TranscriptionResponse"]
-    assert {"text", "usage", "token_usage"}.issubset(response_schema["required"])
+    assert {
+        "text",
+        "usage",
+        "token_usage",
+        "tokens_consumed",
+        "processing_status",
+        "error_code",
+        "error_message",
+        "processing_time_ms",
+    }.issubset(response_schema["required"])
 
 
 def test_usage_response_schema_matches_openai_whisper_duration_contract() -> None:
@@ -45,6 +54,11 @@ def test_openai_validation_error_and_request_id() -> None:
     response = TestClient(app).post("/v1/audio/transcriptions")
     assert response.status_code == 400
     assert set(response.json()["error"]) == {"message", "type", "param", "code"}
+    assert response.json()["tokens_consumed"] == 0
+    assert response.json()["processing_status"] == "failed"
+    assert response.json()["error_code"] == "missing_required_parameter"
+    assert response.json()["error_message"]
+    assert isinstance(response.json()["processing_time_ms"], int)
     assert response.headers["x-request-id"].startswith("req_")
 
 
@@ -56,6 +70,11 @@ def test_openai_unknown_model_error() -> None:
     )
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "model_not_found"
+    assert response.json()["tokens_consumed"] == 0
+    assert response.json()["processing_status"] == "failed"
+    assert response.json()["error_code"] == "model_not_found"
+    assert response.json()["error_message"]
+    assert isinstance(response.json()["processing_time_ms"], int)
 
 
 def test_upload_ui_is_packaged() -> None:

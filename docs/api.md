@@ -41,7 +41,12 @@ the exact number of decoder token IDs emitted by the local Whisper engine:
   "token_usage": {
     "output_tokens": 11,
     "source": "whisper_decoder_token_ids"
-  }
+  },
+  "tokens_consumed": 11,
+  "processing_status": "completed",
+  "error_code": null,
+  "error_message": null,
+  "processing_time_ms": 842
 }
 ```
 
@@ -50,6 +55,23 @@ usage contract for duration-billed transcription models.
 `token_usage.output_tokens` is counted from actual Whisper decoder token IDs;
 it is not estimated from text length. Whisper audio input is duration-based,
 so this API does not invent an input token count.
+
+### Audit contract
+
+All JSON transcription responses expose the following required top-level
+fields:
+
+| Field | Success | Failure | Meaning |
+|---|---|---|---|
+| `tokens_consumed` | Exact decoder token count | `0` | Tokens emitted before completion/failure |
+| `processing_status` | `completed` | `failed` | Final processing state |
+| `error_code` | `null` | Stable string code | Machine-readable failure code |
+| `error_message` | `null` | Error description | Human-readable failure reason |
+| `processing_time_ms` | Integer | Integer | Server processing time in milliseconds |
+
+Failures preserve the OpenAI `error` envelope and include the audit fields at
+the top level. Plain text and subtitle outputs cannot embed JSON fields; their
+successful processing status and elapsed time are exposed through HTTP headers.
 
 ### Verbose JSON
 

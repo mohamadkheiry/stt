@@ -45,6 +45,14 @@ emitted by the Whisper decoder. It is available for `json` and `verbose_json`.
 Plain text and subtitle formats remain byte-compatible and do not embed JSON
 usage metadata.
 
+## Audit fields
+
+The JSON contract requires `tokens_consumed`, `processing_status`,
+`error_code`, `error_message`, and `processing_time_ms`. Successful responses
+use `completed` with null error fields. OpenAI-style error responses keep the
+nested `error` object and additionally expose the audit fields with status
+`failed` and zero consumed tokens.
+
 ## Downstream services
 
 Internal consumers must send `model=whisper-1` and should parse the OpenAI error envelope before falling back to raw response text. Any future breaking contract change requires a new versioned route rather than changing `/v1/*` in place.
