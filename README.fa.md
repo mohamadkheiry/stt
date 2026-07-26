@@ -10,6 +10,7 @@
 `token_usage.output_tokens` بر اساس تعداد واقعی توکن‌های decoder ویسپر هستند.
 فیلدهای Audit شامل `tokens_consumed`، `processing_status`، `error_code`،
 `error_message` و `processing_time_ms` نیز در پاسخ JSON ارائه می‌شوند.
+مقدار `tokens_consumed` دقیقاً برابر `usage.seconds` و براساس مدت صوت با گردکردن به بالا است.
 
 ```bash
 cp .env.example .env

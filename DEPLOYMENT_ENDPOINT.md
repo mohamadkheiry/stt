@@ -17,9 +17,9 @@ This file records the latest verified deployment address for operators and devel
 | Health | <http://192.168.20.189:8101/health> |
 | Transcription API | `POST http://192.168.20.189:8101/v1/audio/transcriptions` |
 | Simple dashboard API | `POST http://192.168.20.189:8101/api/transcribe` |
-| API version | `1.4.0` |
+| API version | `1.4.1` |
 | Usage reporting | OpenAI duration `usage` + exact Whisper decoder `token_usage` |
-| Last verified | `2026-07-25` |
+| Last verified | `2026-07-26` |
 
 The engine endpoint `127.0.0.1:8091` is internal to the server and must not be published to users.
 
@@ -31,6 +31,7 @@ The engine endpoint `127.0.0.1:8091` is internal to the server and must not be p
 - Both containers were healthy at the last verification.
 - A real transcription verified `usage.seconds`, `token_usage.output_tokens`, and the matching usage headers.
 - Success and validation-error tests verified all required audit contract fields.
+- A real transcription verified `tokens_consumed == usage.seconds` while preserving all other contract fields.
 - Boot supervisor: `ai-platform-compose.service`
 - GPU discovery at boot: `nvidia-cdi-refresh.path`
 

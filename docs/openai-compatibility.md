@@ -53,6 +53,11 @@ use `completed` with null error fields. OpenAI-style error responses keep the
 nested `error` object and additionally expose the audit fields with status
 `failed` and zero consumed tokens.
 
+For successful transcriptions, `tokens_consumed` is exactly equal to
+`usage.seconds`, which is the decoded audio duration rounded upward with
+`ceil`. `usage`, `token_usage`, processing status, error fields, and processing
+time retain their existing structures and semantics.
+
 ## Downstream services
 
 Internal consumers must send `model=whisper-1` and should parse the OpenAI error envelope before falling back to raw response text. Any future breaking contract change requires a new versioned route rather than changing `/v1/*` in place.

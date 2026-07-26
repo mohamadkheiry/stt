@@ -12,6 +12,7 @@ Production-oriented speech-to-text service with a Persian upload UI, Swagger/Ope
 - JSON, text, verbose JSON, SRT, and VTT output
 - OpenAI-style duration `usage` plus exact Whisper decoder `token_usage` in JSON responses
 - Audit fields for token consumption, processing status, errors, and processing time
+- `tokens_consumed` mirrors ceiling-rounded `usage.seconds` for duration-based accounting
 - Docker health checks, bounded GPU concurrency, persistent model cache, restart policy, and log rotation
 - Separate public API and private engine containers
 - No credentials or model weights committed to Git

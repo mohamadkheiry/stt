@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "services" / "api"))
 
-from stt_api.main import app  # noqa: E402
+from stt_api.main import app, duration_usage_fields  # noqa: E402
 
 
 def multipart_schema(path: str) -> dict:
@@ -48,6 +48,18 @@ def test_usage_response_schema_matches_openai_whisper_duration_contract() -> Non
     schema = app.openapi()["components"]["schemas"]
     assert schema["DurationUsage"]["properties"]["type"]["const"] == "duration"
     assert schema["WhisperTokenUsage"]["properties"]["source"]["const"] == "whisper_decoder_token_ids"
+
+
+def test_tokens_consumed_equals_ceiling_duration_seconds() -> None:
+    fields = duration_usage_fields({"duration": 8.47, "segments": []})
+    assert fields == {
+        "usage": {"type": "duration", "seconds": 9},
+        "tokens_consumed": 9,
+    }
+
+    fallback = duration_usage_fields({"segments": [{"end": 3.01}]})
+    assert fallback["usage"]["seconds"] == 4
+    assert fallback["tokens_consumed"] == fallback["usage"]["seconds"]
 
 
 def test_openai_validation_error_and_request_id() -> None:

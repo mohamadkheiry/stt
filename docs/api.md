@@ -42,7 +42,7 @@ the exact number of decoder token IDs emitted by the local Whisper engine:
     "output_tokens": 11,
     "source": "whisper_decoder_token_ids"
   },
-  "tokens_consumed": 11,
+  "tokens_consumed": 2,
   "processing_status": "completed",
   "error_code": null,
   "error_message": null,
@@ -63,7 +63,7 @@ fields:
 
 | Field | Success | Failure | Meaning |
 |---|---|---|---|
-| `tokens_consumed` | Exact decoder token count | `0` | Tokens emitted before completion/failure |
+| `tokens_consumed` | Equal to `usage.seconds` | `0` | Ceiling-rounded audio-duration consumption |
 | `processing_status` | `completed` | `failed` | Final processing state |
 | `error_code` | `null` | Stable string code | Machine-readable failure code |
 | `error_message` | `null` | Error description | Human-readable failure reason |
@@ -72,6 +72,15 @@ fields:
 Failures preserve the OpenAI `error` envelope and include the audit fields at
 the top level. Plain text and subtitle outputs cannot embed JSON fields; their
 successful processing status and elapsed time are exposed through HTTP headers.
+
+For every successful JSON response, the following invariant is enforced:
+
+```text
+tokens_consumed == usage.seconds == ceil(decoded_audio_duration_seconds)
+```
+
+`token_usage.output_tokens` remains unchanged and continues to report the exact
+Whisper decoder token-ID count independently from `tokens_consumed`.
 
 ### Verbose JSON
 

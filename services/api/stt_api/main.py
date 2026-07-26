@@ -65,7 +65,7 @@ class ContractErrorResponse(BaseModel):
 
 app = FastAPI(
     title="Whisper Large Persian Speech-to-Text API",
-    version="1.4.0",
+    version="1.4.1",
     description=(
         "سرویس تبدیل فایل صوتی به متن با Whisper Large و شتاب‌دهی GPU. "
         "در Swagger روی **Try it out** بزنید، فایل را انتخاب کنید و پاسخ را دریافت کنید."
@@ -91,6 +91,20 @@ app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 
 def openai_error(message: str, error_type: str, param: str | None, code: str | None) -> dict[str, Any]:
     return {"error": {"message": message, "type": error_type, "param": param, "code": code}}
+
+
+def duration_usage_fields(payload: dict[str, Any]) -> dict[str, Any]:
+    duration = max(0.0, float(payload.get("duration", 0.0) or 0.0))
+    if duration == 0.0:
+        duration = max(
+            (float(segment.get("end", 0.0) or 0.0) for segment in payload.get("segments", [])),
+            default=0.0,
+        )
+    seconds = math.ceil(duration)
+    return {
+        "usage": {"type": "duration", "seconds": seconds},
+        "tokens_consumed": seconds,
+    }
 
 
 @app.middleware("http")
@@ -226,23 +240,16 @@ async def forward_transcription(
         except ValueError as exc:
             raise HTTPException(502, "Whisper engine returned invalid JSON.") from exc
 
-        duration = max(0.0, float(payload.get("duration", 0.0) or 0.0))
-        if duration == 0.0:
-            duration = max(
-                (float(segment.get("end", 0.0) or 0.0) for segment in payload.get("segments", [])),
-                default=0.0,
-            )
         output_tokens = sum(
             len(segment.get("tokens", []))
             for segment in payload.get("segments", [])
             if isinstance(segment, dict) and isinstance(segment.get("tokens", []), list)
         )
-        payload["usage"] = {"type": "duration", "seconds": math.ceil(duration)}
+        payload.update(duration_usage_fields(payload))
         payload["token_usage"] = {
             "output_tokens": output_tokens,
             "source": "whisper_decoder_token_ids",
         }
-        payload["tokens_consumed"] = output_tokens
         payload["processing_status"] = "completed"
         payload["error_code"] = None
         payload["error_message"] = None
@@ -262,7 +269,7 @@ async def forward_transcription(
             payload,
             headers={
                 "X-STT-Engine": "whisper-large",
-                "X-Usage-Audio-Seconds": str(math.ceil(duration)),
+                "X-Usage-Audio-Seconds": str(payload["usage"]["seconds"]),
                 "X-Whisper-Output-Tokens": str(output_tokens),
                 "X-Processing-Status": "completed",
                 "X-Processing-Time-Ms": str(payload["processing_time_ms"]),
@@ -333,7 +340,7 @@ TRANSCRIPTION_RESPONSES[200]["content"] = {
                 "output_tokens": 11,
                 "source": "whisper_decoder_token_ids",
             },
-            "tokens_consumed": 11,
+            "tokens_consumed": 2,
             "processing_status": "completed",
             "error_code": None,
             "error_message": None,
