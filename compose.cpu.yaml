@@ -1,0 +1,8 @@
+# Development-only CPU override. It uses a smaller model for quick validation.
+services:
+  whisper-engine:
+    deploy: null
+    environment:
+      WHISPER_MODEL: small
+      WHISPER_DEVICE: cpu
+      WHISPER_COMPUTE_TYPE: int8

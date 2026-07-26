@@ -1,0 +1,17 @@
+[Unit]
+Description=Whisper STT Docker Compose stack
+Requires=docker.service
+After=docker.service network-online.target nvidia-cdi-refresh.service
+Wants=network-online.target nvidia-cdi-refresh.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/whisper-stt
+ExecStart=/usr/bin/docker compose up -d --remove-orphans
+ExecReload=/usr/bin/docker compose up -d --remove-orphans
+ExecStop=/usr/bin/docker compose stop
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

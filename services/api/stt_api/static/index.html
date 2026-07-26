@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Whisper Large | تبدیل صوت به متن</title>
+  <style>
+    :root{color-scheme:dark;--bg:#07111f;--panel:#0d1b2e;--line:#20344f;--text:#f4f7fb;--muted:#93a4ba;--accent:#48d7b0;--danger:#ff7185}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;font-family:Tahoma,"Segoe UI",sans-serif;background:radial-gradient(circle at 80% 0,#123455 0,transparent 38%),var(--bg);color:var(--text)}
+    main{width:min(920px,calc(100% - 32px));margin:48px auto}.eyebrow{color:var(--accent);font-weight:700}h1{font-size:clamp(30px,6vw,56px);margin:10px 0}p{color:var(--muted);line-height:1.9}
+    .card{margin-top:28px;padding:28px;border:1px solid var(--line);border-radius:24px;background:color-mix(in srgb,var(--panel) 92%,transparent);box-shadow:0 24px 70px #0007}
+    .drop{display:grid;place-items:center;min-height:190px;padding:24px;border:2px dashed #365372;border-radius:18px;text-align:center;cursor:pointer;transition:.2s}.drop:hover,.drop.active{border-color:var(--accent);background:#48d7b00b}.drop input{display:none}.file-name{color:var(--accent);margin-top:8px}
+    .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:20px}label span{display:block;color:var(--muted);margin-bottom:8px}select,input[type=text]{width:100%;padding:13px;border:1px solid var(--line);border-radius:12px;background:#081421;color:var(--text)}
+    button{width:100%;margin-top:20px;padding:15px;border:0;border-radius:14px;background:linear-gradient(90deg,#36caa3,#58e1be);color:#03130f;font-weight:800;font-size:16px;cursor:pointer}button:disabled{opacity:.45;cursor:wait}
+    pre{display:none;white-space:pre-wrap;overflow:auto;margin:22px 0 0;padding:18px;border-radius:14px;background:#050d17;border:1px solid var(--line);line-height:1.9;direction:rtl}.links{display:flex;gap:18px;margin-top:20px}.links a{color:var(--accent)}.status{min-height:24px;margin-top:14px;color:var(--muted)}.error{color:var(--danger)}
+    @media(max-width:640px){main{margin:24px auto}.card{padding:18px}.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">WHISPER LARGE · GPU</div>
+  <h1>تبدیل سریع صوت به متن</h1>
+  <p>فایل صوتی فارسی را وارد کنید و متن استخراج‌شده را مستقیماً دریافت کنید.</p>
+  <section class="card">
+    <form id="form">
+      <input name="model" type="hidden" value="whisper-1">
+      <label class="drop" id="drop">
+        <input id="file" name="file" type="file" accept="audio/*,video/mp4" required>
+        <strong>فایل را اینجا رها کنید یا برای انتخاب کلیک کنید</strong>
+        <span class="file-name" id="fileName">WAV، MP3، M4A، OGG یا WebM</span>
+      </label>
+      <div class="grid">
+        <label><span>زبان</span><select name="language"><option value="fa">فارسی</option><option value="en">English</option><option value="">تشخیص خودکار</option></select></label>
+        <label><span>قالب خروجی</span><select name="response_format"><option value="json">JSON</option><option value="text">متن ساده</option><option value="srt">SRT</option><option value="vtt">VTT</option><option value="verbose_json">Verbose JSON</option></select></label>
+      </div>
+      <label style="display:block;margin-top:16px"><span>واژه‌های تخصصی یا متن راهنما (اختیاری)</span><input name="prompt" type="text" maxlength="2000"></label>
+      <button id="submit" type="submit">شروع تبدیل</button>
+      <div class="status" id="status"></div>
+      <pre id="result"></pre>
+    </form>
+    <div class="links"><a href="/docs">Swagger API</a><a href="/redoc">ReDoc</a><a href="/health">Health</a></div>
+  </section>
+</main>
+<script>
+  const form=document.querySelector('#form'),file=document.querySelector('#file'),drop=document.querySelector('#drop'),fileName=document.querySelector('#fileName'),status=document.querySelector('#status'),result=document.querySelector('#result'),submit=document.querySelector('#submit');
+  file.addEventListener('change',()=>{if(file.files[0])fileName.textContent=`${file.files[0].name} · ${(file.files[0].size/1048576).toFixed(1)} MB`});
+  ['dragenter','dragover'].forEach(e=>drop.addEventListener(e,x=>{x.preventDefault();drop.classList.add('active')}));
+  ['dragleave','drop'].forEach(e=>drop.addEventListener(e,x=>{x.preventDefault();drop.classList.remove('active')}));
+  drop.addEventListener('drop',e=>{file.files=e.dataTransfer.files;file.dispatchEvent(new Event('change'))});
+  form.addEventListener('submit',async e=>{e.preventDefault();result.style.display='none';status.className='status';status.textContent='در حال پردازش فایل روی کارت گرافیک…';submit.disabled=true;try{const body=new FormData(form);body.set('temperature','0');const response=await fetch('/v1/audio/transcriptions',{method:'POST',body});const text=await response.text();if(!response.ok)throw new Error(text);try{result.textContent=JSON.stringify(JSON.parse(text),null,2)}catch{result.textContent=text}result.style.display='block';status.textContent='تبدیل با موفقیت انجام شد.'}catch(error){status.className='status error';status.textContent=`خطا: ${error.message}`}finally{submit.disabled=false}});
+</script>
+</body>
+</html>
